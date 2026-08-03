@@ -1,0 +1,59 @@
+{
+  "name": "distributrack",
+  "productName": "DistribuTrack",
+  "version": "1.0.0",
+  "description": "Distribution Credit & Collection Management System",
+  "author": "Gowthaman K",
+  "main": "main.js",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.distributrack.app",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist/**",
+      "!node_modules/.cache/**"
+    ],
+    "extraResources": [
+      {
+        "from": "project",
+        "to": "project"
+      },
+      {
+        "from": "php",
+        "to": "php"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.2",
+    "bootstrap-icons": "^1.11.3",
+    "datatables.net": "^2.3.8",
+    "datatables.net-bs5": "^2.3.8",
+    "jquery": "^4.0.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "xlsx": "^0.18.5"
+  }
+}

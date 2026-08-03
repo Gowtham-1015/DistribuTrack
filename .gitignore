@@ -1,0 +1,14 @@
+# Node dependencies
+node_modules/
+
+# Electron build output
+dist/
+
+# SQLite database files
+project/database/distribu_track.db
+
+# Logs
+*.log
+
+# Windows files
+Thumbs.db
