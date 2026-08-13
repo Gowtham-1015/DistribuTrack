@@ -32,17 +32,19 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 -- Invoices table (one row per "bill" issued via Distribution)
+-- Lifecycle: OPEN -> CLOSED (fully paid) -> ARCHIVED (60+ days after closing, or manual)
 CREATE TABLE IF NOT EXISTS invoices (
     invoice_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    invoice_number TEXT NOT NULL UNIQUE,
+    invoice_number TEXT NOT NULL UNIQUE,   -- manually entered by the user, must be unique
     customer_id INTEGER NOT NULL,
     company_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     amount_paid REAL NOT NULL DEFAULT 0,
-    invoice_date TEXT NOT NULL,
-    due_date TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','CLOSED')),
-    closed_at TEXT,
+    invoice_date TEXT NOT NULL,            -- Issue Date, recorded automatically at creation
+    last_payment_date TEXT,                -- most recent collection date; resets the aging clock while OPEN
+    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','CLOSED','ARCHIVED')),
+    closed_at TEXT,                        -- when it became fully paid
+    archived_at TEXT,                      -- when it was archived
     note TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
@@ -91,28 +93,31 @@ INSERT OR IGNORE INTO customers (customer_id, customer_name, phone, address) VAL
 (3, 'Suresh Kumar', '0762345678', '78 Lake View, Galle'),
 (4, 'Fatima Nazar', '0754321098', '23 Beach Road, Negombo');
 
--- Sample invoices (bills) — due 30 days after issue
-INSERT OR IGNORE INTO invoices (invoice_id, invoice_number, customer_id, company_id, amount, amount_paid, invoice_date, due_date, status, closed_at, note) VALUES
-(1, 'INV-0001', 1, 1, 15000.00, 5000.00, date('now','-5 day'), date('now','-5 day','+30 day'), 'OPEN',   NULL, 'Invoice #1001'),
-(2, 'INV-0002', 1, 2, 8500.00,  0.00,    date('now','-4 day'), date('now','-4 day','+30 day'), 'OPEN',   NULL, 'Invoice #1002'),
-(3, 'INV-0003', 2, 1, 22000.00, 10000.00,date('now','-7 day'), date('now','-7 day','+30 day'), 'OPEN',   NULL, 'Invoice #1003'),
-(4, 'INV-0004', 3, 2, 5500.00,  0.00,    date('now','-6 day'), date('now','-6 day','+30 day'), 'OPEN',   NULL, 'Invoice #1004'),
-(5, 'INV-0005', 3, 3, 12000.00, 12000.00,date('now','-8 day'), date('now','-8 day','+30 day'), 'CLOSED', datetime('now','-1 day'), 'Invoice #1005'),
-(6, 'INV-0006', 4, 2, 9000.00,  0.00,    date('now'),          date('now','+30 day'),          'OPEN',   NULL, 'Invoice #1006'),
-(7, 'INV-0007', 4, 3, 3500.00,  0.00,    date('now'),          date('now','+30 day'),          'OPEN',   NULL, 'Invoice #1007'),
-(8, 'INV-0008', 1, 1, 7000.00,  0.00,    date('now'),          date('now','+30 day'),          'OPEN',   NULL, 'Invoice #1008');
+-- Sample invoices (bills)
+INSERT OR IGNORE INTO invoices (invoice_id, invoice_number, customer_id, company_id, amount, amount_paid, invoice_date, last_payment_date, status, closed_at, archived_at, note) VALUES
+(1, 'INV-1001', 1, 1, 15000.00, 5000.00,  date('now','-5 day'), date('now','-3 day'), 'OPEN',     NULL,                    NULL, 'Regular delivery'),
+(2, 'INV-1002', 1, 2, 8500.00,  0.00,     date('now','-4 day'), NULL,                  'OPEN',     NULL,                    NULL, NULL),
+(3, 'INV-1003', 2, 1, 22000.00, 10000.00, date('now','-7 day'), date('now','-2 day'), 'OPEN',     NULL,                    NULL, 'Customer requested extra stock'),
+(4, 'INV-1004', 3, 2, 5500.00,  0.00,     date('now','-6 day'), NULL,                  'OPEN',     NULL,                    NULL, NULL),
+(5, 'INV-1005', 3, 3, 12000.00, 12000.00, date('now','-8 day'), date('now','-1 day'), 'CLOSED',   datetime('now','-1 day'), NULL, 'Paid in full, cash'),
+(6, 'INV-1006', 4, 2, 9000.00,  0.00,     date('now'),          NULL,                  'OPEN',     NULL,                    NULL, NULL),
+(7, 'INV-1007', 4, 3, 3500.00,  0.00,     date('now'),          NULL,                  'OPEN',     NULL,                    NULL, NULL),
+(8, 'INV-1008', 1, 1, 7000.00,  0.00,     date('now'),          NULL,                  'OPEN',     NULL,                    NULL, NULL),
+(9, 'INV-0950', 2, 3, 6000.00,  6000.00,  date('now','-95 day'),date('now','-70 day'), 'ARCHIVED', datetime('now','-70 day'), datetime('now','-10 day'), 'Old settled invoice, archived example');
 
 -- Sample transactions (ledger), each linked to its invoice
 INSERT OR IGNORE INTO transactions (customer_id, company_id, invoice_id, transaction_type, amount, transaction_date, note) VALUES
-(1, 1, 1, 'CREDIT',      15000.00, date('now','-5 day'), 'Invoice #1001'),
+(1, 1, 1, 'CREDIT',      15000.00, date('now','-5 day'), 'Regular delivery'),
 (1, 1, 1, 'COLLECTION',   5000.00, date('now','-3 day'), 'Partial payment'),
-(1, 2, 2, 'CREDIT',       8500.00, date('now','-4 day'), 'Invoice #1002'),
-(2, 1, 3, 'CREDIT',      22000.00, date('now','-7 day'), 'Invoice #1003'),
-(2, 1, 3, 'COLLECTION',  10000.00, date('now','-2 day'), 'Payment received'),
-(3, 2, 4, 'CREDIT',       5500.00, date('now','-6 day'), 'Invoice #1004'),
-(3, 3, 5, 'CREDIT',      12000.00, date('now','-8 day'), 'Invoice #1005'),
-(3, 3, 5, 'COLLECTION',  12000.00, date('now','-1 day'), 'Full payment'),
-(4, 2, 6, 'CREDIT',       9000.00, date('now'),          'Invoice #1006'),
-(4, 3, 7, 'CREDIT',       3500.00, date('now'),          'Invoice #1007'),
-(1, 1, 8, 'CREDIT',       7000.00, date('now'),          'Invoice #1008'),
+(1, 2, 2, 'CREDIT',       8500.00, date('now','-4 day'), NULL),
+(2, 1, 3, 'CREDIT',      22000.00, date('now','-7 day'), 'Customer requested extra stock'),
+(2, 1, 3, 'COLLECTION',  10000.00, date('now','-2 day'), 'Bank transfer'),
+(3, 2, 4, 'CREDIT',       5500.00, date('now','-6 day'), NULL),
+(3, 3, 5, 'CREDIT',      12000.00, date('now','-8 day'), 'Paid in full, cash'),
+(3, 3, 5, 'COLLECTION',  12000.00, date('now','-1 day'), 'Cash received in full'),
+(4, 2, 6, 'CREDIT',       9000.00, date('now'),          NULL),
+(4, 3, 7, 'CREDIT',       3500.00, date('now'),          NULL),
+(1, 1, 8, 'CREDIT',       7000.00, date('now'),          NULL),
+(2, 3, 9, 'CREDIT',       6000.00, date('now','-95 day'), 'Old settled invoice, archived example'),
+(2, 3, 9, 'COLLECTION',   6000.00, date('now','-70 day'), 'Cheque cleared'),
 (2, 2, NULL, 'COLLECTION', 5000.00, date('now'),          'Unallocated legacy collection');

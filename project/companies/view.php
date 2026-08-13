@@ -19,7 +19,7 @@ $pageTitle = 'Company: ' . $company['company_name'];
 
 // All transactions for this company, ordered by date
 $stmt = $db->prepare("
-    SELECT t.*, cu.customer_name, i.invoice_number, i.due_date
+    SELECT t.*, cu.customer_name, i.invoice_number, i.status as inv_status, i.closed_at as inv_closed_at, i.invoice_date as inv_invoice_date, i.last_payment_date as inv_last_payment_date
     FROM transactions t
     JOIN customers cu ON t.customer_id = cu.customer_id
     LEFT JOIN invoices i ON t.invoice_id = i.invoice_id
@@ -167,7 +167,7 @@ include '../includes/header.php';
                                     <th>Invoice #</th>
                                     <th>Type</th>
                                     <th>Amount</th>
-                                    <th>Due Date</th>
+                                    <th>Days Outstanding</th>
                                     <th>Note</th>
                                 </tr>
                             </thead>
@@ -186,7 +186,7 @@ include '../includes/header.php';
                                     <td class="<?= $t['transaction_type']==='CREDIT'?'amount-credit':'amount-collection' ?>">
                                         <?= ($t['transaction_type']==='CREDIT' ? '+' : '-') . formatCurrency($t['amount']) ?>
                                     </td>
-                                    <td><?= ($t['transaction_type']==='CREDIT' && $t['due_date']) ? formatDate($t['due_date']) : '—' ?></td>
+                                    <td><?= ($t['transaction_type']==='CREDIT' && $t['invoice_number']) ? daysOutstanding($t['inv_invoice_date'], $t['inv_closed_at'], $t['inv_status'], $t['inv_last_payment_date']) . ' Days' : '—' ?></td>
                                     <td style="color:var(--text-muted);font-size:12.5px;"><?= htmlspecialchars($t['note'] ?: '—') ?></td>
                                 </tr>
                                 <?php endforeach; ?>

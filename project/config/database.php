@@ -43,9 +43,8 @@ class Database {
      * Auto-creates all tables (and seed data) the first time the
      * database is used, so no manual installer step is required.
      * Also runs small additive migrations for databases created by
-     * an earlier version of the app (e.g. adding the invoices table
-     * and transactions.invoice_id to a pre-existing database), and
-     * purges invoices that have been fully paid for 60+ days.
+     * an earlier version of the app, and auto-archives invoices that
+     * have been fully paid for 60+ days.
      */
     private function ensureSchema() {
         $exists = $this->pdo
@@ -61,7 +60,7 @@ class Database {
         }
 
         $this->migrate();
-        $this->purgeExpiredInvoices();
+        $this->archiveExpiredInvoices();
     }
 
     /**
@@ -83,9 +82,10 @@ class Database {
                     amount REAL NOT NULL,
                     amount_paid REAL NOT NULL DEFAULT 0,
                     invoice_date TEXT NOT NULL,
-                    due_date TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','CLOSED')),
+                    last_payment_date TEXT,
+                    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','CLOSED','ARCHIVED')),
                     closed_at TEXT,
+                    archived_at TEXT,
                     note TEXT,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
@@ -95,6 +95,56 @@ class Database {
             $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_invoice_customer ON invoices(customer_id)");
             $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_invoice_company  ON invoices(company_id)");
             $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_invoice_status   ON invoices(status)");
+        } else {
+            // Older invoices table: drop due_date, add archived_at / last_payment_date,
+            // widen the status CHECK to include ARCHIVED. Rebuilt via a fresh table +
+            // copy, which works on any SQLite version (not just 3.35+).
+            $cols = $this->pdo->query("PRAGMA table_info(invoices)")->fetchAll(PDO::FETCH_ASSOC);
+            $colNames = array_column($cols, 'name');
+            $needsRebuild = !in_array('archived_at', $colNames)
+                || !in_array('last_payment_date', $colNames)
+                || in_array('due_date', $colNames);
+
+            if ($needsRebuild) {
+                $hasOldLastPayment = in_array('last_payment_date', $colNames);
+                $this->pdo->exec('BEGIN TRANSACTION');
+                try {
+                    $this->pdo->exec("ALTER TABLE invoices RENAME TO invoices_old");
+                    $this->pdo->exec("
+                        CREATE TABLE invoices (
+                            invoice_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            invoice_number TEXT NOT NULL UNIQUE,
+                            customer_id INTEGER NOT NULL,
+                            company_id INTEGER NOT NULL,
+                            amount REAL NOT NULL,
+                            amount_paid REAL NOT NULL DEFAULT 0,
+                            invoice_date TEXT NOT NULL,
+                            last_payment_date TEXT,
+                            status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','CLOSED','ARCHIVED')),
+                            closed_at TEXT,
+                            archived_at TEXT,
+                            note TEXT,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
+                            FOREIGN KEY (company_id) REFERENCES companies(company_id) ON DELETE CASCADE
+                        )
+                    ");
+                    $lastPaymentSelect = $hasOldLastPayment ? 'last_payment_date' : 'NULL';
+                    $this->pdo->exec("
+                        INSERT INTO invoices (invoice_id, invoice_number, customer_id, company_id, amount, amount_paid, invoice_date, last_payment_date, status, closed_at, note, created_at)
+                        SELECT invoice_id, invoice_number, customer_id, company_id, amount, amount_paid, invoice_date, $lastPaymentSelect, status, closed_at, note, created_at
+                        FROM invoices_old
+                    ");
+                    $this->pdo->exec("DROP TABLE invoices_old");
+                    $this->pdo->exec('COMMIT');
+                } catch (Exception $e) {
+                    $this->pdo->exec('ROLLBACK');
+                    throw $e;
+                }
+                $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_invoice_customer ON invoices(customer_id)");
+                $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_invoice_company  ON invoices(company_id)");
+                $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_invoice_status   ON invoices(status)");
+            }
         }
 
         $cols = $this->pdo->query("PRAGMA table_info(transactions)")->fetchAll(PDO::FETCH_ASSOC);
@@ -108,14 +158,15 @@ class Database {
     }
 
     /**
-     * Deletes any invoice that has been fully paid (status=CLOSED) for
-     * 60 days or more. Linked ledger transactions are kept for
-     * accounting history — only the invoice/bill record itself is
-     * removed (transactions.invoice_id is set to NULL automatically).
+     * Moves any invoice that has been fully paid (status=CLOSED) for
+     * 60 days or more into the ARCHIVED state. Nothing is ever deleted
+     * — archived invoices, their notes, and their collection history
+     * remain in the database and stay searchable on the Archive page.
      */
-    public function purgeExpiredInvoices() {
+    public function archiveExpiredInvoices() {
         $this->pdo->exec("
-            DELETE FROM invoices
+            UPDATE invoices
+            SET status = 'ARCHIVED', archived_at = datetime('now')
             WHERE status = 'CLOSED'
               AND closed_at IS NOT NULL
               AND datetime(closed_at) <= datetime('now', '-60 days')

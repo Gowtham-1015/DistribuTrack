@@ -54,34 +54,15 @@ include 'includes/header.php';
                         <div class="stat-meta">Active companies</div>
                     </div>
                 </div>
-                <div class="col-6 col-md-4 col-xl">
-                    <div class="stat-card red">
-                        <div class="stat-card-header">
-                            <span class="stat-label">Total Distributions</span>
-                            <div class="stat-icon red"><i class="bi bi-arrow-up-circle-fill"></i></div>
-                        </div>
-                        <div class="stat-value" style="font-size:18px;"><?= formatCurrency($totalDistributions) ?></div>
-                        <div class="stat-meta">Credit issued (all time)</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4 col-xl">
-                    <div class="stat-card green">
-                        <div class="stat-card-header">
-                            <span class="stat-label">Total Collections</span>
-                            <div class="stat-icon green"><i class="bi bi-arrow-down-circle-fill"></i></div>
-                        </div>
-                        <div class="stat-value" style="font-size:18px;"><?= formatCurrency($totalCollections) ?></div>
-                        <div class="stat-meta">Payments received (all time)</div>
-                    </div>
-                </div>
+               
                 <div class="col-12 col-md-4 col-xl">
                     <div class="stat-card accent">
                         <div class="stat-card-header">
-                            <span class="stat-label">Outstanding Balance</span>
+                            <span class="stat-label">Net Balance</span>
                             <div class="stat-icon accent"><i class="bi bi-hourglass-split"></i></div>
                         </div>
                         <div class="stat-value" style="font-size:18px;"><?= formatCurrency($outstandingBalance) ?></div>
-                        <div class="stat-meta">Distributions − collections</div>
+                        <div class="stat-meta">Current net balance</div>
                     </div>
                 </div>
             </div>

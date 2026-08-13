@@ -16,7 +16,7 @@ $pageTitle = 'Ledger: ' . $customer['customer_name'];
 
 // All transactions ordered by date
 $transactions = $conn->query("
-    SELECT t.*, co.company_name, i.invoice_number, i.due_date
+    SELECT t.*, co.company_name, i.invoice_number, i.status as inv_status, i.closed_at as inv_closed_at, i.invoice_date as inv_invoice_date, i.last_payment_date as inv_last_payment_date
     FROM transactions t
     JOIN companies co ON t.company_id = co.company_id
     LEFT JOIN invoices i ON t.invoice_id = i.invoice_id
@@ -64,7 +64,7 @@ $openInvoices = $conn->query("
     FROM invoices i
     JOIN companies co ON i.company_id = co.company_id
     WHERE i.customer_id=$id AND i.status='OPEN'
-    ORDER BY i.due_date ASC
+    ORDER BY i.invoice_date ASC
 ");
 $openInvRows = [];
 while ($row = $openInvoices->fetch_assoc()) $openInvRows[] = $row;
@@ -112,19 +112,7 @@ include '../includes/header.php';
 
             <!-- Summary Totals -->
             <div class="row g-3 mb-4">
-                <div class="col-md-4">
-                    <div class="stat-card red">
-                        <div class="stat-card-header"><span class="stat-label">Total Credit</span><div class="stat-icon red"><i class="bi bi-arrow-up-circle-fill"></i></div></div>
-                        <div class="stat-value" style="font-size:20px;"><?= formatCurrency($totals['total_credit']) ?></div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="stat-card green">
-                        <div class="stat-card-header"><span class="stat-label">Total Collection</span><div class="stat-icon green"><i class="bi bi-arrow-down-circle-fill"></i></div></div>
-                        <div class="stat-value" style="font-size:20px;"><?= formatCurrency($totals['total_collection']) ?></div>
-                    </div>
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-6 col-lg-4">
                     <div class="stat-card <?= $totalBalance > 0 ? 'accent' : 'green' ?>">
                         <div class="stat-card-header"><span class="stat-label">Net Balance</span><div class="stat-icon <?= $totalBalance > 0 ? 'accent' : 'green' ?>"><i class="bi bi-wallet2"></i></div></div>
                         <div class="stat-value" style="font-size:20px;"><?= formatCurrency($totalBalance) ?></div>
@@ -172,16 +160,15 @@ include '../includes/header.php';
                     <div class="table-responsive">
                         <table class="table">
                             <thead>
-                                <tr><th>Invoice #</th><th>Company</th><th>Due Date</th><th>Balance</th></tr>
+                                <tr><th>Invoice #</th><th>Company</th><th>Days Outstanding</th><th>Balance</th></tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($openInvRows as $inv): $overdue = isInvoiceOverdue($inv['due_date'], $inv['status']); ?>
+                                <?php foreach ($openInvRows as $inv): $days = daysOutstanding($inv['invoice_date'], $inv['closed_at'], $inv['status'], $inv['last_payment_date']); ?>
                                 <tr>
                                     <td><strong><?= htmlspecialchars($inv['invoice_number']) ?></strong></td>
                                     <td><?= htmlspecialchars($inv['company_name']) ?></td>
-                                    <td class="<?= $overdue ? 'text-danger fw-display' : '' ?>">
-                                        <?= formatDate($inv['due_date']) ?>
-                                        <?php if ($overdue): ?><i class="bi bi-exclamation-triangle-fill" title="Overdue"></i><?php endif; ?>
+                                    <td class="<?= $days > 30 ? 'text-danger fw-display' : '' ?>">
+                                        <?= $days ?> Day<?= $days == 1 ? '' : 's' ?>
                                     </td>
                                     <td class="amount-neutral"><?= formatCurrency($inv['balance']) ?></td>
                                 </tr>
@@ -210,7 +197,7 @@ include '../includes/header.php';
                                     <th>Invoice #</th>
                                     <th>Type</th>
                                     <th>Amount</th>
-                                    <th>Due Date</th>
+                                    <th>Days Outstanding</th>
                                     <th>Running Balance</th>
                                     <th>Note</th>
                                 </tr>
@@ -230,7 +217,7 @@ include '../includes/header.php';
                                     <td class="<?= $t['transaction_type']==='CREDIT'?'amount-credit':'amount-collection' ?>">
                                         <?= ($t['transaction_type']==='CREDIT' ? '+' : '-') . formatCurrency($t['amount']) ?>
                                     </td>
-                                    <td><?= ($t['transaction_type']==='CREDIT' && $t['due_date']) ? formatDate($t['due_date']) : '—' ?></td>
+                                    <td><?= ($t['transaction_type']==='CREDIT' && $t['invoice_number']) ? daysOutstanding($t['inv_invoice_date'], $t['inv_closed_at'], $t['inv_status'], $t['inv_last_payment_date']) . ' Days' : '—' ?></td>
                                     <td class="running-balance <?= $t['running_balance'] > 0 ? 'balance-positive' : 'balance-negative' ?>">
                                         <?= formatCurrency($t['running_balance']) ?>
                                     </td>

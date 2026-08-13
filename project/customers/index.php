@@ -57,8 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $customers = $conn->query("
     SELECT cu.*,
-    COALESCE(SUM(CASE WHEN t.transaction_type='CREDIT' THEN t.amount ELSE 0 END),0) as total_credit,
-    COALESCE(SUM(CASE WHEN t.transaction_type='COLLECTION' THEN t.amount ELSE 0 END),0) as total_collection,
     COALESCE(SUM(CASE WHEN t.transaction_type='CREDIT' THEN t.amount ELSE -t.amount END),0) as balance,
     COUNT(DISTINCT t.transaction_id) as txn_count
     FROM customers cu
@@ -100,8 +98,6 @@ include '../includes/header.php';
                                     <th>Phone</th>
                                     <th>Address</th>
                                     <th>Transactions</th>
-                                    <th>Total Credit</th>
-                                    <th>Total Collection</th>
                                     <th>Balance</th>
                                     <th class="no-export">Actions</th>
                                 </tr>
@@ -118,10 +114,8 @@ include '../includes/header.php';
                                     <td><?= htmlspecialchars($c['phone'] ?: '—') ?></td>
                                     <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($c['address'] ?: '—') ?></td>
                                     <td><?= $c['txn_count'] ?></td>
-                                    <td class="amount-credit"><?= formatCurrency($c['total_credit']) ?></td>
-                                    <td class="amount-collection"><?= formatCurrency($c['total_collection']) ?></td>
                                     <td class="<?= $c['balance'] > 0 ? 'amount-credit' : 'amount-collection' ?> fw-display">
-                                        <?= formatCurrency($c['balance']) ?>
+                                    <?= formatCurrency($c['balance']) ?>
                                     </td>
                                     <td class="no-export">
                                         <a href="view.php?id=<?= $c['customer_id'] ?>" class="btn btn-outline-secondary btn-sm btn-icon" title="View Ledger">

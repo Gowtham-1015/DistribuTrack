@@ -66,25 +66,21 @@ function formatDate($date) {
 }
 
 /**
- * Generates the next sequential invoice number, e.g. INV-0009.
+ * Days Outstanding = how long an invoice has gone unpaid.
+ *
+ * Always counts from the Issue Date. While OPEN it keeps counting up
+ * to today regardless of partial payments — a partial payment does
+ * NOT reset the clock, since the bill is still outstanding until it's
+ * fully paid. Once CLOSED or ARCHIVED, it freezes at Issue Date ->
+ * closed_at: the total time it took to fully settle.
  */
-function generateInvoiceNumber($db) {
-    $conn = $db->getConnection();
-    $row = $conn->query("
-        SELECT invoice_number FROM invoices
-        ORDER BY invoice_id DESC LIMIT 1
-    ")->fetch_assoc();
-
-    $next = 1;
-    if ($row && preg_match('/(\d+)$/', $row['invoice_number'], $m)) {
-        $next = (int)$m[1] + 1;
+function daysOutstanding($issueDate, $closedAt, $status, $lastPaymentDate = null) {
+    $start = new DateTime(substr($issueDate, 0, 10));
+    if ($status === 'OPEN' || !$closedAt) {
+        $end = new DateTime(date('Y-m-d'));
+    } else {
+        $end = new DateTime(substr($closedAt, 0, 10));
     }
-    return 'INV-' . str_pad($next, 4, '0', STR_PAD_LEFT);
-}
-
-/**
- * True when an invoice is still open and its due date has passed.
- */
-function isInvoiceOverdue($dueDate, $status) {
-    return $status === 'OPEN' && strtotime($dueDate) < strtotime(date('Y-m-d'));
+    $diff = $start->diff($end);
+    return (int)$diff->days;
 }

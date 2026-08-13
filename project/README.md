@@ -33,6 +33,7 @@
 - **New pages**: `users/index.php` (admin-only user management) and `settings/index.php` (profile + password) so the sidebar's Users/Settings links are fully functional, not placeholders.
 - **Transactions**: One shared page now serves both **Distribution** (`?type=CREDIT`) and **Collections** (`?type=COLLECTION`) from the sidebar; the original combined Transactions view is still reachable without a type filter.
 - **Date-wise report**: Kept (not requested for removal) and reachable via a "Date Report" button on the Distribution/Collections page, since it isn't one of the sidebar's listed items.
+- **Invoice tracking**: Each Distribution creates a numbered invoice (bill). The number is **entered manually** and must be unique — duplicates are rejected with a clear error. Collections are applied against a specific invoice, found via a **type-to-search field** (not a dropdown), and cannot exceed its remaining balance. There are no due dates anywhere in the app; instead every invoice shows **Days Outstanding** (Issue Date → today while open, frozen at the settlement date once paid). Fully paid invoices move `OPEN → CLOSED → ARCHIVED` — archiving happens automatically 60 days after closing, or manually from the Distribution page — and archived invoices are never deleted, just moved to the **Archive** page (linked from Distribution) where they stay searchable with all notes and collection history intact.
 
 ## Features
 
