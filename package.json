@@ -1,7 +1,7 @@
 {
   "name": "distributrack",
   "productName": "DistribuTrack",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Distribution Credit & Collection Management System",
   "author": "Gowthaman K",
   "main": "main.js",
