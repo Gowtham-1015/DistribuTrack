@@ -74,9 +74,7 @@ include '../includes/header.php';
                                     <td><?= $inv['archived_at'] ? formatDate($inv['archived_at']) : '-' ?></td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (empty($archivedRows)): ?>
-                                <tr><td colspan="8" class="empty-state">No archived invoices yet. Settled bills move here automatically 60 days after closing, or can be archived manually from the Distribution page.</td></tr>
-                            <?php endif; ?>
+                            
                             </tbody>
                         </table>
                     </div>

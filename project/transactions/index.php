@@ -9,88 +9,228 @@ $conn = $db->getConnection();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // Add Distribution (creates a new invoice/bill)
-    if ($action === 'add_distribution') {
-        $invoiceNumber = trim($_POST['invoice_number'] ?? '');
-        $cid    = (int)$_POST['customer_id'];
-        $coid   = (int)$_POST['company_id'];
-        $amount = (float)$_POST['amount'];
-        $note   = trim($_POST['note'] ?? '');
-        $today  = date('Y-m-d');
+  // Add Distribution (creates a new invoice/bill)
+if ($action === 'add_distribution') {
+    $invoiceNumber = trim($_POST['invoice_number'] ?? '');
+    $cid    = (int)($_POST['customer_id'] ?? 0);
+    $coid   = (int)($_POST['company_id'] ?? 0);
+    $amount = (float)($_POST['amount'] ?? 0);
+    $note   = trim($_POST['note'] ?? '');
+    $today  = date('Y-m-d');
 
-        if (!$invoiceNumber) {
-            setFlash('error', 'Please enter an invoice number.');
-        } elseif (!($cid && $coid && $amount > 0)) {
-            setFlash('error', 'Please fill all required fields.');
+    if (!$invoiceNumber) {
+        setFlash('error', 'Please enter an invoice number.');
+
+    } elseif (!($cid && $coid && $amount > 0)) {
+        setFlash('error', 'Please fill all required fields.');
+
+    } else {
+        // Verify that the selected customer actually exists
+        $customerStmt = $db->prepare(
+            "SELECT COUNT(*) as c FROM customers WHERE customer_id=?"
+        );
+        $customerStmt->bind_param('i', $cid);
+        $customerStmt->execute();
+        $customerExists = $customerStmt->get_result()->fetch_assoc()['c'];
+
+        // Verify that the selected company actually exists
+        $companyStmt = $db->prepare(
+            "SELECT COUNT(*) as c FROM companies WHERE company_id=?"
+        );
+        $companyStmt->bind_param('i', $coid);
+        $companyStmt->execute();
+        $companyExists = $companyStmt->get_result()->fetch_assoc()['c'];
+
+        if (!$customerExists) {
+            setFlash(
+                'error',
+                'The selected customer no longer exists. Please refresh the page and select a valid customer.'
+            );
+
+        } elseif (!$companyExists) {
+            setFlash(
+                'error',
+                'The selected company no longer exists. Please refresh the page and select a valid company.'
+            );
+
         } else {
-            $checkStmt = $db->prepare("SELECT COUNT(*) as c FROM invoices WHERE invoice_number=?");
+            // Check whether invoice number already exists
+            $checkStmt = $db->prepare(
+                "SELECT COUNT(*) as c FROM invoices WHERE invoice_number=?"
+            );
             $checkStmt->bind_param('s', $invoiceNumber);
             $checkStmt->execute();
             $exists = $checkStmt->get_result()->fetch_assoc()['c'];
 
             if ($exists) {
-                setFlash('error', 'Invoice number already exists. Please enter a different invoice number.');
+                setFlash(
+                    'error',
+                    'Invoice number already exists. Please enter a different invoice number.'
+                );
+
             } else {
                 $db->beginTransaction();
-                $stmt = $db->prepare("INSERT INTO invoices (invoice_number,customer_id,company_id,amount,amount_paid,invoice_date,status,note) VALUES (?,?,?,?,0,?,'OPEN',?)");
-                $stmt->bind_param('siidss', $invoiceNumber, $cid, $coid, $amount, $today, $note);
+
+                $stmt = $db->prepare(
+                    "INSERT INTO invoices
+                    (invoice_number, customer_id, company_id, amount, amount_paid, invoice_date, status, note)
+                    VALUES (?, ?, ?, ?, 0, ?, 'OPEN', ?)"
+                );
+                $stmt->bind_param(
+                    'siidss',
+                    $invoiceNumber,
+                    $cid,
+                    $coid,
+                    $amount,
+                    $today,
+                    $note
+                );
                 $stmt->execute();
+
                 $invoiceId = $db->lastInsertId();
 
-                $stmt = $db->prepare("INSERT INTO transactions (customer_id,company_id,invoice_id,transaction_type,amount,transaction_date,note) VALUES (?,?,?,'CREDIT',?,?,?)");
-                $stmt->bind_param('iiidss', $cid, $coid, $invoiceId, $amount, $today, $note);
+                $stmt = $db->prepare(
+                    "INSERT INTO transactions
+                    (customer_id, company_id, invoice_id, transaction_type, amount, transaction_date, note)
+                    VALUES (?, ?, ?, 'CREDIT', ?, ?, ?)"
+                );
+                $stmt->bind_param(
+                    'iiidss',
+                    $cid,
+                    $coid,
+                    $invoiceId,
+                    $amount,
+                    $today,
+                    $note
+                );
                 $stmt->execute();
+
                 $db->commit();
 
-                setFlash('success', "Distribution recorded as invoice $invoiceNumber.");
+                setFlash(
+                    'success',
+                    "Distribution recorded as invoice $invoiceNumber."
+                );
             }
         }
     }
+}
+// Add Collection (pays down a specific invoice, found by invoice number)
+if ($action === 'add_collection') {
+    $invoiceNumber = trim($_POST['invoice_number'] ?? '');
+    $amount        = (float)($_POST['amount'] ?? 0);
+    $note          = trim($_POST['note'] ?? '');
+    $today         = date('Y-m-d');
 
-    // Add Collection (pays down a specific invoice, found by invoice number)
-    if ($action === 'add_collection') {
-        $invoiceNumber = trim($_POST['invoice_number'] ?? '');
-        $amount        = (float)$_POST['amount'];
-        $note          = trim($_POST['note'] ?? '');
-        $today         = date('Y-m-d');
-
-        $stmt = $db->prepare("SELECT * FROM invoices WHERE invoice_number=?");
+    if (!$invoiceNumber) {
+        setFlash('error', 'Please enter or select an invoice number.');
+    } else {
+        $stmt = $db->prepare(
+            "SELECT * FROM invoices WHERE invoice_number=?"
+        );
         $stmt->bind_param('s', $invoiceNumber);
         $stmt->execute();
         $invoice = $stmt->get_result()->fetch_assoc();
 
-        if (!$invoiceNumber) {
-            setFlash('error', 'Please enter or select an invoice number.');
-        } elseif (!$invoice) {
+        if (!$invoice) {
             setFlash('error', "Invoice '$invoiceNumber' was not found.");
+
         } elseif ($invoice['status'] !== 'OPEN') {
-            setFlash('error', "Invoice {$invoice['invoice_number']} is not open for collection (status: {$invoice['status']}).");
+            setFlash(
+                'error',
+                "Invoice {$invoice['invoice_number']} is not open for collection (status: {$invoice['status']})."
+            );
+
         } elseif ($amount <= 0) {
             setFlash('error', 'Amount must be greater than zero.');
+
         } else {
             $balance = $invoice['amount'] - $invoice['amount_paid'];
+
             if ($amount > $balance + 0.001) {
-                setFlash('error', 'Amount exceeds the outstanding balance of ' . formatCurrency($balance) . ' for invoice ' . $invoice['invoice_number'] . '.');
+                setFlash(
+                    'error',
+                    'Amount exceeds the outstanding balance of ' .
+                    formatCurrency($balance) .
+                    ' for invoice ' .
+                    $invoice['invoice_number'] .
+                    '.'
+                );
             } else {
                 $newPaid  = $invoice['amount_paid'] + $amount;
                 $isClosed = $newPaid >= $invoice['amount'] - 0.001;
 
-                $db->beginTransaction();
-                $status   = $isClosed ? 'CLOSED' : 'OPEN';
-                $closedAt = $isClosed ? date('Y-m-d H:i:s') : null;
-                $stmt = $db->prepare("UPDATE invoices SET amount_paid=?, status=?, closed_at=?, last_payment_date=? WHERE invoice_id=?");
-                $stmt->bind_param('dsssi', $newPaid, $status, $closedAt, $today, $invoice['invoice_id']);
-                $stmt->execute();
+                try {
+                    $db->beginTransaction();
 
-                $stmt = $db->prepare("INSERT INTO transactions (customer_id,company_id,invoice_id,transaction_type,amount,transaction_date,note) VALUES (?,?,?,'COLLECTION',?,?,?)");
-                $stmt->bind_param('iiidss', $invoice['customer_id'], $invoice['company_id'], $invoice['invoice_id'], $amount, $today, $note);
-                $stmt->execute();
-                $db->commit();
+                    $status   = $isClosed ? 'CLOSED' : 'OPEN';
+                    $closedAt = $isClosed ? date('Y-m-d H:i:s') : null;
 
-                setFlash('success', 'Collection recorded against invoice ' . $invoice['invoice_number'] . ($isClosed ? ' - bill fully settled.' : '.'));
+                    // Update invoice payment information
+                    $stmt = $db->prepare(
+                        "UPDATE invoices
+                         SET amount_paid=?,
+                             status=?,
+                             closed_at=?,
+                             last_payment_date=?
+                         WHERE invoice_id=?"
+                    );
+
+                    $stmt->bind_param(
+                        'dsssi',
+                        $newPaid,
+                        $status,
+                        $closedAt,
+                        $today,
+                        $invoice['invoice_id']
+                    );
+
+                    $stmt->execute();
+
+                    // Record the collection transaction
+                    $stmt = $db->prepare(
+                        "INSERT INTO transactions
+                         (customer_id, company_id, invoice_id, transaction_type, amount, transaction_date, note)
+                         VALUES (?, ?, ?, 'COLLECTION', ?, ?, ?)"
+                    );
+
+                    $stmt->bind_param(
+                        'iiidss',
+                        $invoice['customer_id'],
+                        $invoice['company_id'],
+                        $invoice['invoice_id'],
+                        $amount,
+                        $today,
+                        $note
+                    );
+
+                    $stmt->execute();
+
+                    $db->commit();
+
+                    setFlash(
+                        'success',
+                        'Collection recorded against invoice ' .
+                        $invoice['invoice_number'] .
+                        ($isClosed
+                            ? ' - bill fully settled.'
+                            : '.')
+                    );
+
+                } catch (Throwable $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+
+                    setFlash(
+                        'error',
+                        'Unable to record the collection. No changes were saved.'
+                    );
+                }
             }
         }
     }
+}
 
     // Edit Distribution (updates the invoice)
     if ($action === 'edit_distribution') {
