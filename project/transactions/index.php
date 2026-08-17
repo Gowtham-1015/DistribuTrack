@@ -460,9 +460,7 @@ include '../includes/header.php';
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (empty($invoiceRows)): ?>
-                                <tr><td colspan="10" class="empty-state">No distribution invoices yet.</td></tr>
-                            <?php endif; ?>
+                            
                             </tbody>
                         </table>
                     </div>

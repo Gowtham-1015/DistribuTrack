@@ -19,6 +19,7 @@ $(document).ready(function () {
                 searchPlaceholder: 'Search...',
                 lengthMenu: 'Show _MENU_',
                 info: 'Showing _START_–_END_ of _TOTAL_',
+                emptyTable: 'No records yet.',
                 paginate: {
                     previous: '<i class="bi bi-chevron-left"></i>',
                     next: '<i class="bi bi-chevron-right"></i>'
